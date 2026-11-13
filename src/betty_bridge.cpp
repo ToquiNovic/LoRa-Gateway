@@ -2,6 +2,7 @@
 #include "config.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 
 BettyBridge::BettyBridge()
@@ -23,6 +24,15 @@ void BettyBridge::begin() {
     enabled = prefs.getBool("enabled", true);
     host = prefs.getString("host", BETTY_DEFAULT_HOST);
     port = prefs.getUShort("port", BETTY_DEFAULT_HTTP_PORT);
+
+    // Auto-migrar IP dummy anterior
+    if (host == "192.168.1.100") {
+        host = BETTY_DEFAULT_HOST;
+        port = BETTY_DEFAULT_HTTP_PORT;
+        prefs.putString("host", host);
+        prefs.putUShort("port", port);
+    }
+
     sensorId = prefs.getString("sensor_id", BETTY_DEFAULT_SENSOR_ID);
     apiKey = prefs.getString("api_key", BETTY_DEFAULT_API_KEY);
     staSsid = prefs.getString("sta_ssid", DEFAULT_STA_SSID);
@@ -32,7 +42,7 @@ void BettyBridge::begin() {
     if (!xBridgeQueue) {
         Serial.println("[BettyBridge] ERROR: Could not create FreeRTOS bridge queue!");
     } else {
-        Serial.printf("[BettyBridge] Initialized. Target: http://%s:%u/api/mqtt/webhook | Gateway ID: %s\n",
+        Serial.printf("[BettyBridge] Initialized. Target: %s:%u/api/mqtt/webhook | Gateway ID: %s\n",
                       host.c_str(), port, sensorId.c_str());
     }
 
@@ -76,7 +86,7 @@ bool BettyBridge::postToBetty(const BettyBridgePacket& pkt) {
 
     // Determine target sensor ID: use the sensor's own ID/UUID from telemetry
     String targetId = (strlen(pkt.sensorId) > 0) ? String(pkt.sensorId) : "gateway-node";
-    String topic = "betty/sensor/" + targetId + "/data";
+    String topic = "botuto/sensor/" + targetId + "/data";
 
     // Build unified Betty payload
     JsonDocument bodyDoc;
@@ -102,26 +112,61 @@ bool BettyBridge::postToBetty(const BettyBridgePacket& pkt) {
     String jsonString;
     serializeJson(bodyDoc, jsonString);
 
-    WiFiClient client;
-    HTTPClient http;
-    String url = "http://" + host + ":" + String(port) + "/api/mqtt/webhook";
+    // Clean host
+    String cleanHost = host;
+    cleanHost.trim();
+    if (cleanHost.startsWith("http://")) cleanHost = cleanHost.substring(7);
+    if (cleanHost.startsWith("https://")) cleanHost = cleanHost.substring(8);
+    if (cleanHost.endsWith("/")) cleanHost = cleanHost.substring(0, cleanHost.length() - 1);
 
-    if (!http.begin(client, url)) {
-        Serial.printf("[BettyBridge] Failed to connect to %s\n", url.c_str());
-        totalFailed++;
-        return false;
+    bool isHttps = (port == 443) || host.startsWith("https://") || 
+                   (cleanHost.indexOf('.') != -1 && !cleanHost.endsWith(".local") && !isdigit(cleanHost[0]));
+
+    HTTPClient http;
+    int httpCode = 0;
+    String url;
+
+    if (isHttps) {
+        if (port == 443 || port == 0) {
+            url = "https://" + cleanHost + "/api/mqtt/webhook";
+        } else {
+            url = "https://" + cleanHost + ":" + String(port) + "/api/mqtt/webhook";
+        }
+
+        WiFiClientSecure secClient;
+        secClient.setInsecure(); // No certificate chain validation required for embedded IoT
+        secClient.setTimeout(5);
+
+        if (!http.begin(secClient, url)) {
+            Serial.printf("[BettyBridge] Failed to init HTTPS connection to %s\n", url.c_str());
+            totalFailed++;
+            return false;
+        }
+
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(5000);
+        httpCode = http.POST(jsonString);
+    } else {
+        url = "http://" + cleanHost + ":" + String(port) + "/api/mqtt/webhook";
+        WiFiClient client;
+        if (!http.begin(client, url)) {
+            Serial.printf("[BettyBridge] Failed to init HTTP connection to %s\n", url.c_str());
+            totalFailed++;
+            return false;
+        }
+
+        http.addHeader("Content-Type", "application/json");
+        http.setTimeout(3000);
+        httpCode = http.POST(jsonString);
     }
 
-    http.addHeader("Content-Type", "application/json");
-    http.setTimeout(3000); // 3-second timeout
-
-    int httpCode = http.POST(jsonString);
     lastHttpCode = httpCode;
 
     if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
         totalSent++;
         lastSentTime = millis();
         http.end();
+        Serial.printf("[BettyBridge] Telemetry dispatched successfully to %s [HTTP %d]\n", url.c_str(), httpCode);
         return true;
     } else {
         Serial.printf("[BettyBridge] Uplink error to %s: HTTP %d\n", url.c_str(), httpCode);

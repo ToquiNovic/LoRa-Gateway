@@ -43,8 +43,8 @@
 #define DEFAULT_GATEWAY_PSK  "betty1234"
 
 // Betty PaaS (Botuto) Bridge Defaults
-#define BETTY_DEFAULT_HOST       "192.168.1.100"
-#define BETTY_DEFAULT_HTTP_PORT  3000
+#define BETTY_DEFAULT_HOST       "betty-api.laboratorio3d.online"
+#define BETTY_DEFAULT_HTTP_PORT  443
 #define BETTY_DEFAULT_SENSOR_ID  "gateway-esp32-01"
 #define BETTY_DEFAULT_API_KEY    "betty_live_secret"
 

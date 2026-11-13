@@ -94,7 +94,7 @@ bool BettyBridge::postToBetty(const BettyBridgePacket& pkt) {
 
     JsonObject payloadObj = bodyDoc["payload"].to<JsonObject>();
     payloadObj["origin_type"] = "sensor";
-    payloadObj["gateway_id"] = "GATEWAY-ESP32-01";
+    payloadObj["gateway_id"] = (sensorId.length() > 0) ? sensorId : "gateway-esp32-01";
     payloadObj["source_sensor"] = targetId;
     payloadObj["interface"] = String(pkt.interface);
     if (pkt.rssi != 0) payloadObj["rssi"] = pkt.rssi;

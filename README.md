@@ -140,7 +140,19 @@ sequenceDiagram
 
 ---
 
-## 🛠️ 4. Panel de Inspección y Portal Cautivo
+## 🧠 4. Skill para Asistentes y Agentes de IA (Agent Skill)
+
+Este repositorio incluye una habilidad estándar para agentes de IA en [`skills/botuto-sensor-integration/SKILL.md`](skills/botuto-sensor-integration/SKILL.md).
+
+Si utilizas un asistente con capacidades agenticas (como **Antigravity**, **Cursor**, **Claude Code** o **Copilot**), el agente puede cargar esta skill automáticamente para:
+* Generar código fuente y firmware para nuevos sensores físicos (ESP32, ESP8266, Arduino, Heltec, Raspberry Pi).
+* Diseñar scripts de integración en Python o Node.js vía HTTP REST, WebSockets o Serie.
+* Asegurar el cumplimiento del contrato de datos de Botuto Platform (`sensorId` como UUID de TimescaleDB y autenticación PSK `betty1234`).
+* Resolver problemas de conexión y sintonización de radio LoRa 433 MHz.
+
+---
+
+## 🛠️ 5. Panel de Inspección y Portal Cautivo
 
 ### Portal Cautivo e Inspector Web en Vivo
 
@@ -161,7 +173,7 @@ Si deseas acceder manualmente desde cualquier navegador:
 
 ---
 
-## 📡 5. Interfaces de Ingesta para Otros Sensores
+## 📡 6. Interfaces de Ingesta para Otros Sensores
 
 Cualquier dispositivo puede reportar métricas al Gateway utilizando cualquiera de las interfaces disponibles:
 
@@ -218,7 +230,7 @@ Microcontroladores conectados físicamente por USB:
 
 ---
 
-## 🔗 6. Enlace hacia Botuto Cloud
+## 🔗 7. Enlace hacia Botuto Cloud
 
 El Gateway corre en modo dual Wi-Fi (`WIFI_AP_STA`):
 1. **AP (`Gateway-IoT-AP`)**: Punto de acceso local para sensores y portal de gestión.

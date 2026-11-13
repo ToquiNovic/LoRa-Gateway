@@ -27,7 +27,9 @@ void HttpServer::begin() {
 }
 
 void HttpServer::handleClient() {
-    dnsServer.processNextRequest();
+    for (int i = 0; i < 3; ++i) {
+        dnsServer.processNextRequest();
+    }
     server.handleClient();
 }
 
@@ -175,6 +177,9 @@ void HttpServer::handlePostGatewayConfig() {
         if (newSsid.length() > 0) {
             WiFi.mode(WIFI_AP_STA);
             WiFi.begin(newSsid.c_str(), newPass.c_str());
+        } else {
+            WiFi.disconnect(false, true);
+            Serial.println("[Wi-Fi STA] Station credentials cleared -> Running in pure AP mode");
         }
     }
     if (doc["host"].is<const char*>()) bridge.setHost(doc["host"].as<String>());
@@ -187,13 +192,15 @@ void HttpServer::handlePostGatewayConfig() {
 }
 
 void HttpServer::handleWifiScan() {
-    Serial.println("[Wi-Fi Scan] Disconnecting STA to release Wi-Fi state machine...");
-    WiFi.disconnect(false, false);
-    delay(100);
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[Wi-Fi Scan] Disconnecting idle STA to release Wi-Fi state machine...");
+        WiFi.disconnect(false, false);
+        delay(50);
+    }
 
-    Serial.println("[Wi-Fi Scan] Scanning 2.4 GHz channels...");
+    Serial.println("[Wi-Fi Scan] Scanning 2.4 GHz channels (Fast 100ms)...");
     WiFi.scanDelete();
-    int16_t n = WiFi.scanNetworks(false, false, false, 300);
+    int16_t n = WiFi.scanNetworks(false, false, false, 100);
     Serial.printf("[Wi-Fi Scan] Scan completed: %d networks found\n", n);
 
     JsonDocument doc;

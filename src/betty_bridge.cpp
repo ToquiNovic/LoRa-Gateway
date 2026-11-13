@@ -46,11 +46,11 @@ void BettyBridge::begin() {
                       host.c_str(), port, sensorId.c_str());
     }
 
-    // Launch Bridge Task on Core 0
+    // Launch Bridge Task on Core 0 (Stack 10240 bytes required for mbedTLS / HTTPS POST)
     xTaskCreatePinnedToCore(
         Task_Betty_Bridge,
         "Task_Betty_Bridge",
-        4096,
+        10240,
         this,
         1, // Priority 1 (Background worker)
         NULL,

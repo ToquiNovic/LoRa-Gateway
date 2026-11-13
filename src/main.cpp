@@ -106,13 +106,30 @@ void Task_Network(void* pvParameters) {
         // 5. Sample on-board physical sensors (I2C / ADC)
         sensorManager.samplePhysicalSensors();
 
-        // 6. Periodic Station Wi-Fi reconnect monitor
-        if (millis() - lastWifiCheck >= 15000) {
+        // 6. Periodic Station Wi-Fi reconnect monitor (ONLY when no user is connected to SoftAP!)
+        if (millis() - lastWifiCheck >= 30000) {
             lastWifiCheck = millis();
             String staSsid = bettyBridge.getStaSsid();
-            if (staSsid.length() > 0 && WiFi.status() != WL_CONNECTED) {
-                Serial.printf("[Wi-Fi STA] Reconnecting to '%s'...\n", staSsid.c_str());
+            uint8_t connectedStations = WiFi.softAPgetStationNum();
+
+            // If a client (phone or PC) is connected to the SoftAP, NEVER interrupt with channel hopping!
+            if (connectedStations > 0) {
+                // Keep radio pinned to Channel 1 for stable captive portal / inspector operation
+            } else if (staSsid.length() > 0 && WiFi.status() != WL_CONNECTED) {
+                Serial.printf("[Wi-Fi STA] Background reconnect attempt to '%s' (Timeout 6s)...\n", staSsid.c_str());
                 WiFi.begin(staSsid.c_str(), bettyBridge.getStaPass().c_str());
+
+                unsigned long startTry = millis();
+                while (WiFi.status() != WL_CONNECTED && millis() - startTry < 6000) {
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                }
+
+                if (WiFi.status() != WL_CONNECTED) {
+                    Serial.println("[Wi-Fi STA] Reconnect timed out -> Resetting to IDLE to protect SoftAP");
+                    WiFi.disconnect(false, false);
+                } else {
+                    Serial.printf("[Wi-Fi STA] Connected to facility network! IP: %s\n", WiFi.localIP().toString().c_str());
+                }
             }
         }
 
@@ -146,6 +163,7 @@ void setup() {
 
     // Wi-Fi Setup: Start in dual AP+STA mode so AP serves the portal while STA scans and connects
     WiFi.mode(WIFI_AP_STA);
+    WiFi.setSleep(false); // Disable modem sleep to prevent SoftAP beacon dropping
     String staSsid = bettyBridge.getStaSsid();
 
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
@@ -156,8 +174,20 @@ void setup() {
                   GATEWAY_AP_SSID, apOk ? "OK" : "FAILED", apIP.toString().c_str());
 
     if (staSsid.length() > 0) {
-        Serial.printf("[Wi-Fi STA] Connecting to facility network '%s'...\n", staSsid.c_str());
+        Serial.printf("[Wi-Fi STA] Attempting initial connection to '%s' (Timeout 8s)...\n", staSsid.c_str());
         WiFi.begin(staSsid.c_str(), bettyBridge.getStaPass().c_str());
+
+        unsigned long startAttempt = millis();
+        while (WiFi.status() != WL_CONNECTED && (millis() - startAttempt < 8000)) {
+            delay(100);
+        }
+
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.printf("[Wi-Fi STA] Connected to '%s'! IP: %s\n", staSsid.c_str(), WiFi.localIP().toString().c_str());
+        } else {
+            Serial.printf("[Wi-Fi STA] Could not connect to '%s' -> Aborting STA to stabilize SoftAP on Channel 1 [OK]\n", staSsid.c_str());
+            WiFi.disconnect(false, false);
+        }
     } else {
         Serial.println("[Wi-Fi STA] No station credentials configured yet (Running in pure AP mode)");
     }
@@ -181,7 +211,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         Task_Network,
         "Task_Network",
-        4096,
+        8192,
         NULL,
         2,
         NULL,

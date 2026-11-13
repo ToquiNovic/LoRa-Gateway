@@ -42,11 +42,24 @@
 // Default Link-Level Pre-Shared Key (Wi-Fi style credentials for sensors)
 #define DEFAULT_GATEWAY_PSK  "betty1234"
 
+// Optional untracked local credentials override
+#if __has_include("config.local.h")
+#include "config.local.h"
+#endif
+
 // Betty PaaS (Botuto) Bridge Defaults
+#ifndef BETTY_DEFAULT_HOST
 #define BETTY_DEFAULT_HOST       "betty-api.laboratorio3d.online"
+#endif
+#ifndef BETTY_DEFAULT_HTTP_PORT
 #define BETTY_DEFAULT_HTTP_PORT  443
+#endif
+#ifndef BETTY_DEFAULT_SENSOR_ID
 #define BETTY_DEFAULT_SENSOR_ID  "gateway-esp32-01"
+#endif
+#ifndef BETTY_DEFAULT_API_KEY
 #define BETTY_DEFAULT_API_KEY    "betty_live_secret"
+#endif
 
 // Networking Ports
 #define HTTP_PORT            80

@@ -247,6 +247,19 @@ const char GATEWAY_HTML[] PROGMEM = R"rawliteral(
         </div>
       </div>
 
+      <div class="form-row">
+        <div class="form-group">
+          <label>ID del Gateway (Firma de Antena)</label>
+          <input type="text" id="cfg-gateway-id" placeholder="gateway-esp32-01">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">Identificador enviado a Botuto en el header <code>X-Gateway-ID</code>.</small>
+        </div>
+        <div class="form-group">
+          <label>API Key de Botuto (Cloud Secret)</label>
+          <input type="password" id="cfg-api-key" placeholder="betty_live_secret">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">Token de autenticación enviado en el header <code>X-API-Key</code>.</small>
+        </div>
+      </div>
+
       <!-- Informational Bridge Note -->
       <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; color: var(--text-muted); font-size: 0.8rem;">
         <span>🌐 <strong>Enlace Transparente a Betty/Botuto:</strong> Los datos de cada sensor recibido (LoRa, Wi-Fi, WebSockets o Serie) se reenvían automáticamente a Betty con sus variables y su propio identificador.</span>
@@ -356,6 +369,12 @@ const char GATEWAY_HTML[] PROGMEM = R"rawliteral(
           document.getElementById('pairing-timer').innerText = `🔐 WPS Pairing Active: ${data.pairingRemaining}s remaining`;
         } else {
           document.getElementById('pairing-timer').innerText = '';
+        }
+        if (data.gatewayId && !document.getElementById('cfg-gateway-id').value) {
+          document.getElementById('cfg-gateway-id').value = data.gatewayId;
+        }
+        if (data.apiKey && !document.getElementById('cfg-api-key').value) {
+          document.getElementById('cfg-api-key').value = data.apiKey;
         }
       } catch (_) {}
     }
@@ -477,7 +496,9 @@ const char GATEWAY_HTML[] PROGMEM = R"rawliteral(
         const payload = {
           ssid: ssid,
           pass: pass,
-          psk: psk
+          psk: psk,
+          sensorId: document.getElementById('cfg-gateway-id').value.trim(),
+          apiKey: document.getElementById('cfg-api-key').value.trim()
         };
 
         const res = await fetch('/api/gateway/config', {

@@ -35,6 +35,16 @@ void BettyBridge::begin() {
 
     sensorId = prefs.getString("sensor_id", BETTY_DEFAULT_SENSOR_ID);
     apiKey = prefs.getString("api_key", BETTY_DEFAULT_API_KEY);
+
+    // Auto-update if NVS held dummy defaults and real credentials are provided via config.local.h
+    if (sensorId == "gateway-esp32-01" && String(BETTY_DEFAULT_SENSOR_ID) != "gateway-esp32-01") {
+        sensorId = BETTY_DEFAULT_SENSOR_ID;
+        prefs.putString("sensor_id", sensorId);
+    }
+    if (apiKey == "betty_live_secret" && String(BETTY_DEFAULT_API_KEY) != "betty_live_secret") {
+        apiKey = BETTY_DEFAULT_API_KEY;
+        prefs.putString("api_key", apiKey);
+    }
     staSsid = prefs.getString("sta_ssid", DEFAULT_STA_SSID);
     staPass = prefs.getString("sta_pass", DEFAULT_STA_PASS);
 
@@ -86,15 +96,24 @@ bool BettyBridge::postToBetty(const BettyBridgePacket& pkt) {
 
     // Determine target sensor ID: use the sensor's own ID/UUID from telemetry
     String targetId = (strlen(pkt.sensorId) > 0) ? String(pkt.sensorId) : "gateway-node";
+    if (targetId == "BASE-ONBOARD" || targetId == "gateway-node") {
+        if (sensorId.length() > 0 && sensorId != "gateway-esp32-01") {
+            targetId = sensorId;
+        }
+    }
     String topic = "botuto/sensor/" + targetId + "/data";
+    String effectiveGwyId = (sensorId.length() > 0) ? sensorId : "gateway-esp32-01";
+    String effectiveKey = (apiKey.length() > 0) ? apiKey : BETTY_DEFAULT_API_KEY;
 
     // Build unified Betty payload
     JsonDocument bodyDoc;
     bodyDoc["topic"] = topic;
+    bodyDoc["clientid"] = effectiveGwyId;
+    bodyDoc["username"] = targetId;
 
     JsonObject payloadObj = bodyDoc["payload"].to<JsonObject>();
     payloadObj["origin_type"] = "sensor";
-    payloadObj["gateway_id"] = (sensorId.length() > 0) ? sensorId : "gateway-esp32-01";
+    payloadObj["gateway_id"] = effectiveGwyId;
     payloadObj["source_sensor"] = targetId;
     payloadObj["interface"] = String(pkt.interface);
     if (pkt.rssi != 0) payloadObj["rssi"] = pkt.rssi;
@@ -144,6 +163,10 @@ bool BettyBridge::postToBetty(const BettyBridgePacket& pkt) {
         }
 
         http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-API-Key", effectiveKey);
+        http.addHeader("X-Gateway-ID", effectiveGwyId);
+        http.addHeader("X-Source-Sensor", targetId);
+        http.addHeader("Authorization", "Bearer " + effectiveKey);
         http.setTimeout(5000);
         httpCode = http.POST(jsonString);
     } else {
@@ -156,6 +179,10 @@ bool BettyBridge::postToBetty(const BettyBridgePacket& pkt) {
         }
 
         http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-API-Key", effectiveKey);
+        http.addHeader("X-Gateway-ID", effectiveGwyId);
+        http.addHeader("X-Source-Sensor", targetId);
+        http.addHeader("Authorization", "Bearer " + effectiveKey);
         http.setTimeout(3000);
         httpCode = http.POST(jsonString);
     }

@@ -148,6 +148,8 @@ void HttpServer::handleGetStatus() {
     doc["authRejections"] = auth.getRejectedCount();
     doc["pairingActive"] = auth.isPairingActive();
     doc["pairingRemaining"] = auth.getPairingRemainingSec();
+    doc["gatewayId"] = bridge.getSensorId();
+    doc["apiKey"] = bridge.getApiKey();
 
     String out;
     serializeJson(doc, out);
@@ -185,6 +187,7 @@ void HttpServer::handlePostGatewayConfig() {
     if (doc["host"].is<const char*>()) bridge.setHost(doc["host"].as<String>());
     if (doc["port"].is<int>()) bridge.setPort(doc["port"].as<uint16_t>());
     if (doc["sensorId"].is<const char*>()) bridge.setSensorId(doc["sensorId"].as<String>());
+    if (doc["apiKey"].is<const char*>()) bridge.setApiKey(doc["apiKey"].as<String>());
     if (doc["psk"].is<const char*>()) auth.setPsk(doc["psk"].as<String>());
 
     server.sendHeader("Access-Control-Allow-Origin", "*");

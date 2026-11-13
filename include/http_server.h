@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <Update.h>
 #include "config.h"
 
 // Forward declarations
@@ -42,7 +43,12 @@ private:
     void handleStartPairing();
     void handlePostGatewayConfig();
     void handleWifiScan();
+    void handleOtaPage();
+    void handleOtaUpload();
+    void handleOtaUploadResult();
     void handleNotFound();
+
+    bool updatingFirmware = false;
 };
 
 #endif // HTTP_SERVER_H

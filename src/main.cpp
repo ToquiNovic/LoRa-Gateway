@@ -10,6 +10,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_ota_ops.h>
 #include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -197,6 +198,18 @@ void setup() {
         NULL,
         1
     );
+
+    // OTA Boot Verification & Anti-Brick Rollback Guard
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    esp_ota_img_states_t ota_state;
+    if (running && esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
+        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+            Serial.printf("[OTA] New firmware boot verified on '%s' -> Cancelling rollback [OK]\n", running->label);
+            esp_ota_mark_app_valid_cancel_rollback();
+        } else {
+            Serial.printf("[OTA] Running stable partition: '%s' (Address: 0x%06X)\n", running->label, running->address);
+        }
+    }
 
     Serial.println("\nGateway is fully online and ready.");
     Serial.printf(">>> Open Sensor Inspector at: http://%s/sensors\n", apIP.toString().c_str());

@@ -173,7 +173,8 @@ const char GATEWAY_HTML[] PROGMEM = R"rawliteral(
       <h1>🌐 Betty IoT Gateway (Nodo Base)</h1>
       <p style="color: var(--text-muted); font-size: 0.9rem;">Authenticated Multi-Transport Sensor Bridge & Inspector</p>
     </div>
-    <div style="display: flex; gap: 0.5rem;">
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <button class="btn btn-secondary" onclick="toggleOta()">🚀 OTA Update</button>
       <button class="btn btn-secondary" onclick="toggleConfig()">⚙️ Gateway Settings</button>
       <button class="btn" onclick="startPairing()">🔐 Pair Sensor (60s WPS)</button>
     </div>
@@ -250,6 +251,39 @@ const char GATEWAY_HTML[] PROGMEM = R"rawliteral(
       <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; color: var(--text-muted); font-size: 0.8rem;">
         <span>🌐 <strong>Enlace Transparente a Betty/Botuto:</strong> Los datos de cada sensor recibido (LoRa, Wi-Fi, WebSockets o Serie) se reenvían automáticamente a Betty con sus variables y su propio identificador.</span>
       </div>
+    </div>
+  </div>
+
+  <!-- OTA Firmware Update Panel (Hidden by default) -->
+  <div class="card" id="ota-panel" style="display: none;">
+    <div class="card-header">
+      <h2>🚀 Actualización Remota de Firmware (OTA)</h2>
+      <button type="button" class="btn btn-secondary" onclick="toggleOta()">Cerrar</button>
+    </div>
+    <div style="padding: 1.25rem;">
+      <div id="ota-status-box" style="display: none;" class="alert-box"></div>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+        Sube el archivo binario compilado (<strong>firmware.bin</strong>) para actualizar el Gateway de forma 100% remota sin desconectar la antena.
+      </p>
+
+      <div class="form-group">
+        <label>Seleccionar Archivo de Firmware (.bin)</label>
+        <input type="file" id="ota-file" accept=".bin" style="padding: 0.4rem; background: var(--bg); border: 1px solid var(--border); width: 100%; border-radius: 0.25rem; color: var(--text);">
+      </div>
+
+      <div id="ota-progress-container" style="display: none; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+          <span id="ota-progress-text">Subiendo firmware...</span>
+          <span id="ota-progress-percent">0%</span>
+        </div>
+        <div style="width: 100%; background: var(--bg); height: 10px; border-radius: 5px; overflow: hidden; border: 1px solid var(--border);">
+          <div id="ota-progress-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.2s;"></div>
+        </div>
+      </div>
+
+      <button type="button" id="btn-ota-upload" class="btn" style="height: 42px; font-weight: 700; width: 100%;" onclick="uploadFirmware()">
+        ⚡ Iniciar Actualización de Firmware
+      </button>
     </div>
   </div>
 
@@ -462,6 +496,86 @@ const char GATEWAY_HTML[] PROGMEM = R"rawliteral(
         showStatus('❌ Error al guardar configuración: ' + err.message, 'danger');
         btnSave.disabled = false;
       }
+    }
+
+    function toggleOta() {
+      const p = document.getElementById('ota-panel');
+      const isOpening = (p.style.display === 'none' || p.style.display === '');
+      p.style.display = isOpening ? 'block' : 'none';
+      if (isOpening) {
+        p.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    function showOtaStatus(msg, type) {
+      const box = document.getElementById('ota-status-box');
+      box.className = 'alert-box alert-' + type;
+      box.innerHTML = msg;
+      box.style.display = 'block';
+    }
+
+    function uploadFirmware() {
+      const fileInput = document.getElementById('ota-file');
+      const btn = document.getElementById('btn-ota-upload');
+      const progressContainer = document.getElementById('ota-progress-container');
+      const progressBar = document.getElementById('ota-progress-bar');
+      const progressPercent = document.getElementById('ota-progress-percent');
+      const progressText = document.getElementById('ota-progress-text');
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showOtaStatus('⚠️ Por favor selecciona un archivo .bin de firmware antes de continuar.', 'danger');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (!file.name.endsWith('.bin')) {
+        showOtaStatus('⚠️ El archivo seleccionado debe tener extensión .bin.', 'danger');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('update', file);
+
+      btn.disabled = true;
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '0%';
+      progressPercent.innerText = '0%';
+      progressText.innerText = 'Enviando ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)...';
+      showOtaStatus('⏳ Flasheando partición secundaria... Por favor NO desconectes la alimentación del nodo.', 'info');
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/update', true);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          progressBar.style.width = percent + '%';
+          progressPercent.innerText = percent + '%';
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          progressBar.style.width = '100%';
+          progressPercent.innerText = '100%';
+          showOtaStatus('✅ ¡Actualización de firmware exitosa! El Gateway se está reiniciando en la nueva partición. La página se recargará en 12 segundos...', 'success');
+          setTimeout(() => { window.location.href = '/'; }, 12000);
+        } else {
+          showOtaStatus('❌ Error al flashear firmware (HTTP ' + xhr.status + '). Revisa la consola serie.', 'danger');
+          btn.disabled = false;
+        }
+      };
+
+      xhr.onerror = () => {
+        showOtaStatus('❌ Error de conexión durante la transmisión del firmware.', 'danger');
+        btn.disabled = false;
+      };
+
+      xhr.send(formData);
+    }
+
+    if (window.location.hash === '#ota' || window.location.pathname === '/update') {
+      toggleOta();
     }
 
     setInterval(fetchSensors, 3000);

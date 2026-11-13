@@ -63,6 +63,13 @@ void HttpServer::setupRoutes() {
     server.on("/api/gateway/config", HTTP_POST, [this]() { this->handlePostGatewayConfig(); });
     server.on("/api/wifi/scan", HTTP_GET, [this]() { this->handleWifiScan(); });
 
+    // Web OTA Firmware Update
+    server.on("/update", HTTP_GET, [this]() { this->handleOtaPage(); });
+    server.on("/update", HTTP_POST,
+        [this]() { this->handleOtaUploadResult(); },
+        [this]() { this->handleOtaUpload(); }
+    );
+
     server.onNotFound([this]() { this->handleNotFound(); });
 }
 
@@ -180,9 +187,13 @@ void HttpServer::handlePostGatewayConfig() {
 }
 
 void HttpServer::handleWifiScan() {
+    Serial.println("[Wi-Fi Scan] Disconnecting STA to release Wi-Fi state machine...");
+    WiFi.disconnect(false, false);
+    delay(100);
+
     Serial.println("[Wi-Fi Scan] Scanning 2.4 GHz channels...");
     WiFi.scanDelete();
-    int16_t n = WiFi.scanNetworks(false, false, false, 150);
+    int16_t n = WiFi.scanNetworks(false, false, false, 300);
     Serial.printf("[Wi-Fi Scan] Scan completed: %d networks found\n", n);
 
     JsonDocument doc;
@@ -223,6 +234,57 @@ void HttpServer::handleWifiScan() {
     serializeJson(doc, out);
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.send(200, "application/json", out);
+}
+
+void HttpServer::handleOtaPage() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.send_P(200, "text/html", GATEWAY_HTML);
+}
+
+void HttpServer::handleOtaUploadResult() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Connection", "close");
+    if (Update.hasError()) {
+        server.send(500, "application/json", "{\"status\":\"ERROR\",\"message\":\"Update failed\"}");
+    } else {
+        server.send(200, "application/json", "{\"status\":\"SUCCESS\",\"message\":\"Firmware updated. Rebooting now...\"}");
+        delay(1000);
+        ESP.restart();
+    }
+}
+
+void HttpServer::handleOtaUpload() {
+    HTTPUpload& upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        updatingFirmware = true;
+        Serial.printf("\n[OTA] ==================================================\n");
+        Serial.printf("[OTA] Receiving remote firmware update: %s\n", upload.filename.c_str());
+        Serial.printf("[OTA] Target partition: Next OTA slot\n");
+        
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+            Serial.print("[OTA] Error in Update.begin: ");
+            Update.printError(Serial);
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            Serial.print("[OTA] Error in Update.write: ");
+            Update.printError(Serial);
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) {
+            Serial.printf("[OTA] Firmware binary written successfully: %u bytes!\n", upload.totalSize);
+            Serial.printf("[OTA] Rebooting gateway into new firmware partition...\n");
+            Serial.printf("[OTA] ==================================================\n\n");
+        } else {
+            Serial.print("[OTA] Error in Update.end: ");
+            Update.printError(Serial);
+            updatingFirmware = false;
+        }
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        Update.end();
+        Serial.println("[OTA] Firmware upload ABORTED by client.");
+        updatingFirmware = false;
+    }
 }
 
 void HttpServer::handleNotFound() {
